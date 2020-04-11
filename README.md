@@ -12,6 +12,8 @@ A sample of converting [Dracula](https://github.com/dracula/ulysses), but they a
 
 ## Requirements (for now)
 
+Don't look at the source code... or if you do have forgiveness.
+
 So I should probably use an XML parser, and a more widely used language... I'll probably switch to Python of Vala... For now...
 
 * [Raku](https://rakudo.org/)
