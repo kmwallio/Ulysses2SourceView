@@ -26,7 +26,7 @@ sub MAIN (
         my %style-map;
         %style-map{'heading1'} = ("markdown:header", "def:type", "def:heading");
         %style-map{'codeblock'} = ("markdown:code-block",);
-        %style-map{'code'} = ("markdown:code", "def:identifier");
+        %style-map{'code'} = ("markdown:code", "def:identifier", "markdown:code-span");
         %style-map{'comment'} = ("markdown:backslash-escape", "def:special-char");
         %style-map{'blockquote'} = ("markdown:blockquote-marker", "def:shebang");
         %style-map{'link'} = ("markdown:link-text", "markdown:url", "markdown:label", "markdown:attribute-value", "def:underlined", "def:comment", "def:preprocessor", "def:constant");
@@ -40,7 +40,7 @@ sub MAIN (
 
         # Regexes to match
         my $author = rx/ :i 'author="' (.+?) '"' /;
-        my $display-name = rx/ :i 'displayName="' (\w+) '"' /;
+        my $display-name = rx/ :i 'displayName="' (.+?) '"' /;
         my $mode = rx/ :i 'mode="' (\w+) '"' /;
         my $identifier = rx/ :i 'identifier="' (\w+) '"' /;
         my $color-value = rx/ :i 'value="' (.+) '"' /;
@@ -59,6 +59,7 @@ sub MAIN (
             {
                 $theme-author = $0.Str();
             }
+
             if ($line ~~ $display-name)
             {
                 $theme-name = $0.Str();
@@ -139,10 +140,28 @@ sub MAIN (
                             if ($elem-fg !eq "")
                             {
                                 my @color-parts = $elem-fg.split(/<[,]>/);
-                                if (@color-parts[0] !eq "")
+                                if (Int.new(@color-parts[0]) > 12)
+                                {
+                                    $fg-color = Color.new(@color-parts[0]);
+                                }
+                                else
                                 {
                                     $fg-color = @colors[@color-parts[0]];
                                 }
+
+                                # my Int $lighten = Int.new(@color-parts[1]);
+                                # if (($lighten < 0) && ($lighten > -10))
+                                # {
+                                #     my Rat $bg-percent = (-.1 * $lighten);
+
+                                #     $fg-color = $fg-color * $bg-percent;
+                                #     my Color $og-bg = $background * (1.0 - $bg-percent);
+                                #     $fg-color = $fg-color + $og-bg;
+                                # }
+                                # elsif ($lighten > 0)
+                                # {
+                                #     $fg-color = $fg-color.lighten($lighten * 15);
+                                # }
                             }
 
                             if ($elem-bg !eq "")
@@ -150,9 +169,9 @@ sub MAIN (
                                 my @color-parts = $elem-bg.split(/<[,]>/);
                                 if (@color-parts[0] !eq "")
                                 {
-                                    if (@color-parts[0] eq "4097")
+                                    if (Int.new(@color-parts[0]) > 12)
                                     {
-                                        $bg-color = Color.new("000000");
+                                        $bg-color = Color.new(@color-parts[0]);
                                     }
                                     else
                                     {
@@ -163,13 +182,22 @@ sub MAIN (
                                 my Int $lighten = Int.new(@color-parts[1]);
                                 if (($lighten < 0) && ($lighten > -10))
                                 {
-                                    my Rat $bg-percent = (-.1 * $lighten);
+                                    my Rat $bg-percent = (-.025 * $lighten);
+
+                                    $bg-color = $bg-color * $bg-percent;
+                                    my Color $og-bg = $background * (1.0 - $bg-percent);
+                                    $bg-color = $bg-color + $og-bg;
+                                }
+                                elsif ($lighten > 0)
+                                {
+                                    my Rat $bg-percent = (.05 * $lighten);
 
                                     $bg-color = $bg-color * $bg-percent;
                                     my Color $og-bg = $background * (1.0 - $bg-percent);
                                     $bg-color = $bg-color + $og-bg;
                                 }
                             }
+
                             $output ~= "foreground=\"$fg-color.to-string('hex')\" background=\"$bg-color.to-string('hex')\" ";
                             
                             for @extra-traits -> $check-trait
