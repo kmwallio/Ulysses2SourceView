@@ -19,6 +19,19 @@ So I should probably use an XML parser, and a more widely used language... I'll 
 
 I thought it'd be fast to just parse the theme with Regex, but I was wrong... but it works... for the most part...
 
+## Converting the Theme
+
+First, extract the Theme.xml from the Ulysses theme package. Then run `./ulysses2sourceview Theme.xml Output.xml`. Add the Theme in gEdit.
+
+```
+Usage:
+  ./ulysses2sourceview [--dark] <input-file> <output-file>
+  
+    <input-file>     a Ulysses theme to convert
+    <output-file>    name of location to write output to
+    --dark           Convert dark mode instead of light
+```
+
 ## Known Issues
 
 There's some magic numbers and strings that I have no idea what they do... so we just did stuff to them until themes looked okayish. If you want the theme to work well, I highly recommend [Ulysses](https://ulysses.app).
