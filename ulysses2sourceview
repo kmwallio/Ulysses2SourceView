@@ -1,0 +1,243 @@
+#!/usr/bin/env perl6
+
+use Color;
+use Color::Operators;
+
+sub MAIN (
+    Str $input-file, #= a Ulysses theme to convert
+    Str $output-file, #= name of location to write output to
+    Bool :$dark #= Convert dark mode instead of light
+)
+{
+    say "Opening $input-file...";
+
+    if ($input-file.IO.e)
+    {
+        # Things to store 
+        my Color @colors;
+        my Str $theme-author = "";
+        my Str $theme-name = "";
+        my Color $foreground = Color.new("000000");
+        my Color $background = Color.new("FFFFFF");
+        my Color $cursor = Color.new("11BCED");
+        my Str $palette = "";
+
+        # Definitions to GtkSourceView
+        my %style-map;
+        %style-map{'heading1'} = ("markdown:header", "def:type", "def:heading");
+        %style-map{'codeblock'} = ("markdown:code-block",);
+        %style-map{'code'} = ("markdown:code", "def:identifier");
+        %style-map{'comment'} = ("markdown:backslash-escape", "def:special-char");
+        %style-map{'blockquote'} = ("markdown:blockquote-marker", "def:shebang");
+        %style-map{'link'} = ("markdown:link-text", "markdown:url", "markdown:label", "markdown:attribute-value", "def:underlined", "def:comment", "def:preprocessor", "def:constant");
+        %style-map{'divider'} = ("markdown:horizontal-rule", "def:note", "markdown:line-break");
+        %style-map{'orderedList'} = ("markdown:list-marker", "def:statement");
+        %style-map{'image'} = ("markdown:image-marker",);
+        %style-map{'emph'} = ("markdown:emphasis", "def:doc-comment-element");
+        %style-map{'strong'} = ("markdown:strong-emphasis", "def:statement");
+
+        my @extra-traits = ("bold", "italic", "strikethrough");
+
+        # Regexes to match
+        my $author = rx/ :i 'author="' (.+?) '"' /;
+        my $display-name = rx/ :i 'displayName="' (\w+) '"' /;
+        my $mode = rx/ :i 'mode="' (\w+) '"' /;
+        my $identifier = rx/ :i 'identifier="' (\w+) '"' /;
+        my $color-value = rx/ :i 'value="' (.+) '"' /;
+        my $attribute-definition = rx/ :i 'definition="' (\w+) '"' /;
+        my $colors-light = rx/ :i 'colorsLight="' (.+?) '"' /;
+        my $colors-dark = rx/ :i 'colorsDark="' (.+?) '"' /;
+        my $traits-match = rx/ :i 'traits="' (.+?) '"' /;
+
+        # State
+        my Bool $in-dark = False;
+        my Str $output = "";
+        for $input-file.IO.lines -> $line {
+
+            my Bool $front-matter = False;
+            if ($line ~~ $author)
+            {
+                $theme-author = $0.Str();
+            }
+            if ($line ~~ $display-name)
+            {
+                $theme-name = $0.Str();
+                $front-matter = True;
+            }
+
+            if ($line ~~ $mode)
+            {
+                $in-dark = ($0.Str() eq ("dark"));
+            }
+
+            my Bool $set-bg = False;
+            my Bool $set-fg = False;
+            if ($line ~~ $identifier)
+            {
+                $set-fg = ($0.Str() eq ("foreground"));
+                $set-bg = ($0.Str() eq ("background"));
+            }
+
+            if ($line ~~ $color-value)
+            {
+                if (($in-dark && $dark) || (!$in-dark && !$dark))
+                {
+                    if ($set-fg)
+                    {
+                        $foreground = Color.new($0.Str());
+                    }
+                    elsif ($set-bg)
+                    {
+                        $background = Color.new($0.Str());
+                    }
+                    else
+                    {
+                        @colors.push(Color.new($0.Str()));
+                    }
+                }
+            }
+
+            if ($line ~~ $attribute-definition)
+            {
+                my Str $block = $0.Str();
+                my Str $colors = "";
+                my Str $traits = "";
+
+                if ($dark)
+                {
+                    if ($line ~~ $colors-dark)
+                    {
+                        $colors = $0.Str();
+                    }
+                }
+                else
+                {
+                    if ($line ~~ $colors-light)
+                    {
+                        $colors = $0.Str();
+                    }
+                }
+
+                if ($line ~~ $traits-match)
+                {
+                    $traits = $0.Str();
+                }
+
+                if (($colors !eq "") && (%style-map{$block}:exists))
+                {
+                    my @color-index = $colors.split(/<[;]>/);
+                    my $elem-fg = @color-index[0];
+                    my $elem-bg = @color-index[2];
+
+                    for %style-map{$block} -> @elements
+                    {
+                        for @elements -> $element
+                        {
+                            $output ~= "  <style name=\"$element\" ";
+                            my Color $fg-color = $foreground;
+                            my Color $bg-color = $background;
+                            if ($elem-fg !eq "")
+                            {
+                                my @color-parts = $elem-fg.split(/<[,]>/);
+                                if (@color-parts[0] !eq "")
+                                {
+                                    $fg-color = @colors[@color-parts[0]];
+                                }
+                            }
+
+                            if ($elem-bg !eq "")
+                            {
+                                my @color-parts = $elem-bg.split(/<[,]>/);
+                                if (@color-parts[0] !eq "")
+                                {
+                                    if (@color-parts[0] eq "4097")
+                                    {
+                                        $bg-color = Color.new("000000");
+                                    }
+                                    else
+                                    {
+                                        $bg-color = @colors[@color-parts[0]];
+                                    }
+                                }
+
+                                my Int $lighten = Int.new(@color-parts[1]);
+                                if (($lighten < 0) && ($lighten > -10))
+                                {
+                                    my Rat $bg-percent = (-.1 * $lighten);
+
+                                    $bg-color = $bg-color * $bg-percent;
+                                    my Color $og-bg = $background * (1.0 - $bg-percent);
+                                    $bg-color = $bg-color + $og-bg;
+                                }
+                            }
+                            $output ~= "foreground=\"$fg-color.to-string('hex')\" background=\"$bg-color.to-string('hex')\" ";
+                            
+                            for @extra-traits -> $check-trait
+                            {
+                                if ($traits.contains($check-trait))
+                                {
+                                    $output ~= "$check-trait=\"true\" ";
+                                }
+                            }
+
+                            if ($element.contains("head"))
+                            {
+                                $output ~= "scale=\"large\" ";
+                            }
+
+                            $output ~= "/>\n";
+                        }
+                    }
+                }
+            }
+
+            if ($front-matter)
+            {
+                my $theme-id = $theme-name.lc().subst(" ", "-");
+                if (!$dark)
+                {
+                    $output ~= "<style-scheme name=\"$theme-name\" id=\"$theme-id\" version=\"1.0\">\n";
+                }
+                else
+                {
+                    $output ~= "<style-scheme name=\"$theme-name Dark\" id=\"" ~ $theme-id ~"-dark\" version=\"1.0\">\n";
+                }
+
+                if ($theme-author !eq "")
+                {
+                    $output ~= "  <author>" ~ $theme-author ~ "</author>\n";
+                }
+                $output ~= "  <description>" ~ $theme-name ~ "</description>\n\n";
+            }
+        }
+        $output ~= "\n  <style name=\"text\" foreground=\"$foreground.to-string('hex')\" background=\"$background.to-string('hex')\" />\n";
+        $output ~= "  <style name=\"cursor\" foreground=\"$cursor.to-string('hex')\" />\n";
+        $output ~= "  <style name=\"current-line\" background=\"$background.to-string('hex')\" />\n";
+
+        # Should come up with something better
+        my Color $selector-bg = Color.new("#11BCED");
+        my Color $selector-fg = Color.new("#EAEAEA");
+
+        my Rat $selector-percent = (.3);
+        $selector-bg = $selector-bg * $selector-percent;
+        $selector-bg = $selector-bg + ($background * (1.0 - $selector-percent));
+        # Foreground
+        $selector-fg = $selector-fg * $selector-percent;
+        $selector-fg = $selector-fg + ($foreground * (1.0 - $selector-percent));
+
+        $output ~= "  <style name=\"selection\" foreground=\"$selector-fg.to-string('hex')\" background=\"$selector-bg.to-string('hex')\" />\n";
+        $output ~= "</style-scheme>";
+
+        say "Writing to $output-file";
+
+        my $fh = open $output-file, :w;
+        $fh.print($output);
+        $fh.close();
+
+        say "Done";
+    }
+    else
+    {
+        say "Error: $input-file does not exist";
+    }
+}
